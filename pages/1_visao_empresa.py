@@ -16,6 +16,80 @@ st.set_page_config(page_title='Visão Entregadores', layout='wide')
 
 
 #------------------------ FUNÇÕES ------------------#
+def country_maps(df1):
+
+    cols = ['City','Road_traffic_density', 'Delivery_location_latitude','Delivery_location_longitude']
+
+    df_aux = (df1.loc[:, cols ]
+                 .groupby(['City','Road_traffic_density'])
+                 .median()
+                 .reset_index())
+
+    map = folium.Map()
+
+    for index, location_info in df_aux.iterrows():
+        folium.Marker([location_info['Delivery_location_latitude'],
+                       location_info['Delivery_location_longitude']],
+                       popup=location_info[['City', 'Road_traffic_density']] ).add_to( map )
+
+    folium_static(map, width=1024, height=600 )
+        
+def order_share_by_week(df1):
+    #Quantidade de pedidos por semana / Número único de entregadores por semana       
+    df_aux01 = df1.loc[:, ['ID', 'week_of_year']].groupby('week_of_year').count().reset_index()
+    df_aux02 = df1.loc[:, ['Delivery_person_ID', 'week_of_year']].groupby('week_of_year').nunique().reset_index()
+
+    df_aux = pd.merge(df_aux01, df_aux02, how='inner', on='week_of_year')
+    df_aux['order_by_deliver'] = df_aux['ID'] / df_aux['Delivery_person_ID']
+
+    fig = px.line(df_aux, x='week_of_year', y='order_by_deliver')
+
+    return fig
+        
+        
+def order_by_week(df1):
+    #criar a coluna de semana
+    df1['week_of_year'] = df1['Order_Date'].dt.strftime('%U')
+    df_aux = df1.loc[:, ['ID', 'week_of_year']].groupby('week_of_year').count().reset_index()
+
+    fig = px.line(df_aux, x='week_of_year', y='ID')
+
+    return fig
+        
+def traffic_order_city(df1):
+        df_aux =(df1.loc[:, ['ID','City','Road_traffic_density']]
+                    .groupby(['City','Road_traffic_density'])
+                    .count()
+                    .reset_index())
+        
+        fig = px.scatter(df_aux, x='City', y='Road_traffic_density', size='ID', color='City')
+
+        return fig
+
+def traffic_order_share(df1):
+    df_aux =(df1.loc[:, ['ID','Road_traffic_density']]
+                .groupby('Road_traffic_density')
+                .count()
+                .reset_index())
+    
+    df_aux['entregas_perc'] = df_aux['ID'] / df_aux['ID'].sum()
+
+    fig = px.pie(df_aux, values='entregas_perc', names='Road_traffic_density')
+
+    return fig
+
+def order_metric(df1):
+    cols = ['ID', 'Order_Date']
+
+    # Selecao de linhas
+    df_aux = df1.loc[:, cols].groupby('Order_Date').count().reset_index()
+
+    # desenhar o gráfico de linhas
+
+    fig = px.bar( df_aux, x='Order_Date', y='ID')
+
+    return fig
+        
 def clear_code(df1):
     
     """
@@ -84,7 +158,7 @@ def clear_code(df1):
 # =======================================
 
 # Import dataset
-df = pd.read_csv( 'datasets/train.csv' )
+df = pd.read_csv( '../datasets/train.csv' )
 #limpando os dados
 
 df1 = clear_code(df)
@@ -140,82 +214,37 @@ with tab1:
     with st.container():
         # order metric
         st.markdown('# Orders by Day')
-        cols = ['ID', 'Order_Date']
-        
-        # Selecao de linhas
-        df_aux = df1.loc[:, cols].groupby('Order_Date').count().reset_index()
-        
-        # desenhar o gráfico de linhas
-        
-        fig = px.bar( df_aux, x='Order_Date', y='ID')
-        
+        fig = order_metric(df1)
         st.plotly_chart(fig, use_container_width=True)
     
     with st.container():
 
         col1, col2 = st.columns(2)
         with col1:
-            st.header("Trafic Order Share")
-            df_aux =(df1.loc[:, ['ID','Road_traffic_density']]
-                        .groupby('Road_traffic_density')
-                        .count()
-                        .reset_index())
-            df_aux = df_aux.loc[df_aux['Road_traffic_density'] != 'NaN', :]
-            df_aux['entregas_perc'] = df_aux['ID'] / df_aux['ID'].sum()
-            
-            fig = px.pie(df_aux, values='entregas_perc', names='Road_traffic_density')
+            st.header("Trafic Order Share")            
+            fig = traffic_order_share(df1)
             st.plotly_chart(fig, use_container_width=True)
 
         with col2:
-            st.header("Trafic Order City")
-            df_aux =(df1.loc[:, ['ID','City','Road_traffic_density']]
-                        .groupby(['City','Road_traffic_density'])
-                        .count()
-                        .reset_index())
-            df_aux = df_aux.loc[df_aux['Road_traffic_density'] != 'NaN', :]
-            df_aux = df_aux.loc[df_aux['City'] != 'NaN', :]
-            
-            fig = px.scatter(df_aux, x='City', y='Road_traffic_density', size='ID', color='City')
+            st.header("Trafic Order City")           
+            fig = traffic_order_city(df1)
             st.plotly_chart(fig, use_container_width=True)
     
 with tab2:
     with st.container():
+        
         st.markdown("# Order by Week")
-        #criar a coluna de semana
-        df1['week_of_year'] = df1['Order_Date'].dt.strftime('%U')
-        df_aux = df1.loc[:, ['ID', 'week_of_year']].groupby('week_of_year').count().reset_index()
-
-        fig = px.line(df_aux, x='week_of_year', y='ID')
-
+        fig = order_by_week(df1)
         st.plotly_chart(fig, use_container_width=True)
         
     with st.container():
-        #Quantidade de pedidos por semana / Número único de entregadores por semana
         
-        df_aux01 = df1.loc[:, ['ID', 'week_of_year']].groupby('week_of_year').count().reset_index()
-        df_aux02 = df1.loc[:, ['Delivery_person_ID', 'week_of_year']].groupby('week_of_year').nunique().reset_index()
-        
-        df_aux = pd.merge(df_aux01, df_aux02, how='inner', on='week_of_year')
-        df_aux['order_by_deliver'] = df_aux['ID'] / df_aux['Delivery_person_ID']
-        
-        fig = px.line(df_aux, x='week_of_year', y='order_by_deliver')
-        
-        st.plotly_chart(fig, user_container_width=True)
+        fig = order_share_by_week(df1)
+        st.plotly_chart(fig, user_container_width=True)       
         
     
 with tab3:
     st.markdown("# Contry Maps")
-    df_aux = (df1.loc[:, ['City','Road_traffic_density', 'Delivery_location_latitude','Delivery_location_longitude']]
-                 .groupby(['City','Road_traffic_density'])
-                 .median()
-                 .reset_index())
+    country_maps(df1)
     
-    map = folium.Map()
-    
-    for index, location_info in df_aux.iterrows():
-        folium.Marker([location_info['Delivery_location_latitude'],
-                       location_info['Delivery_location_longitude']],
-                       popup=location_info[['City', 'Road_traffic_density']] ).add_to( map )
-        
-    
-    folium_static(map, width=1024, height=600 )
+  
